@@ -1,0 +1,44 @@
+# Pre-commit hooks for BlockSecOps smart contract security scanning
+# See https://pre-commit.com for more information
+
+- id: blocksecops-scan
+  name: BlockSecOps Security Scan
+  description: Scan smart contracts for security vulnerabilities
+  entry: blocksecops scan run
+  language: python
+  types_or: [solidity, file]
+  files: \.(sol|vy|rs)$
+  args:
+    - --fail-on=high
+    - --output=table
+  pass_filenames: true
+  require_serial: true
+  stages: [commit]
+
+- id: blocksecops-scan-critical
+  name: BlockSecOps Critical Only
+  description: Scan for critical vulnerabilities only (faster)
+  entry: blocksecops scan run
+  language: python
+  types_or: [solidity, file]
+  files: \.(sol|vy|rs)$
+  args:
+    - --fail-on=critical
+    - --output=table
+  pass_filenames: true
+  require_serial: true
+  stages: [commit]
+
+- id: blocksecops-scan-sarif
+  name: BlockSecOps SARIF Output
+  description: Scan with SARIF output for CI integration
+  entry: blocksecops scan run
+  language: python
+  types_or: [solidity, file]
+  files: \.(sol|vy|rs)$
+  args:
+    - --fail-on=high
+    - --output=sarif
+  pass_filenames: true
+  require_serial: true
+  stages: [commit, push]
