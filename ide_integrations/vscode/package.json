@@ -1,0 +1,94 @@
+{
+  "name": "blocksecops",
+  "displayName": "BlockSecOps",
+  "description": "Smart contract security scanning powered by blocksecops-cli",
+  "version": "1.0.0",
+  "publisher": "blocksecops",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blocksecops/blocksecops-cli"
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "solidity",
+    "smart contracts",
+    "security",
+    "blockchain",
+    "ethereum"
+  ],
+  "activationEvents": [
+    "onLanguage:solidity",
+    "workspaceContains:**/*.sol"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "blocksecops.scanFile",
+        "title": "BlockSecOps: Scan File"
+      },
+      {
+        "command": "blocksecops.scanWorkspace",
+        "title": "BlockSecOps: Scan Workspace"
+      },
+      {
+        "command": "blocksecops.showOutput",
+        "title": "BlockSecOps: Show Output"
+      }
+    ],
+    "configuration": {
+      "title": "BlockSecOps",
+      "properties": {
+        "blocksecops.cliPath": {
+          "type": "string",
+          "default": "blocksecops",
+          "description": "Path to the blocksecops-cli executable"
+        },
+        "blocksecops.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan files when saved"
+        },
+        "blocksecops.outputFormat": {
+          "type": "string",
+          "enum": ["sarif", "json", "table"],
+          "default": "sarif",
+          "description": "Output format for scan results"
+        },
+        "blocksecops.severityThreshold": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high", "critical"],
+          "default": "low",
+          "description": "Minimum severity level to report"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "solidity",
+        "extensions": [".sol"]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.70.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
