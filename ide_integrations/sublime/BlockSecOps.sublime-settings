@@ -1,0 +1,16 @@
+{
+    // Path to the blocksecops-cli executable
+    // Use "blocksecops" if it's in your PATH, or specify the full path
+    "cli_path": "blocksecops",
+
+    // Automatically scan Solidity files when saved
+    "scan_on_save": false,
+
+    // Output format for scan results
+    // Options: "sarif", "json", "table"
+    "output_format": "sarif",
+
+    // Minimum severity level to report
+    // Options: "info", "low", "medium", "high", "critical"
+    "severity_threshold": "low"
+}

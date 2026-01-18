@@ -1,0 +1,14 @@
+[
+    {
+        "caption": "BlockSecOps: Scan File",
+        "command": "block_sec_ops_scan"
+    },
+    {
+        "caption": "BlockSecOps: Scan Workspace",
+        "command": "block_sec_ops_scan_workspace"
+    },
+    {
+        "caption": "BlockSecOps: Clear Markers",
+        "command": "block_sec_ops_clear_markers"
+    }
+]

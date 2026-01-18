@@ -1,0 +1,88 @@
+<idea-plugin>
+    <id>com.blocksecops.intellij</id>
+    <name>BlockSecOps</name>
+    <version>1.0.0</version>
+    <vendor email="support@blocksecops.io" url="https://blocksecops.io">BlockSecOps</vendor>
+
+    <description><![CDATA[
+        Smart contract security scanning powered by blocksecops-cli.
+
+        <h2>Features</h2>
+        <ul>
+            <li>Scan Solidity files for security vulnerabilities</li>
+            <li>Real-time editor annotations for detected issues</li>
+            <li>Tool window for viewing scan results</li>
+            <li>Integration with blocksecops-cli</li>
+        </ul>
+
+        <h2>Requirements</h2>
+        <ul>
+            <li>blocksecops-cli must be installed and available in PATH</li>
+        </ul>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <h2>1.0.0</h2>
+        <ul>
+            <li>Initial release</li>
+            <li>File and project scanning</li>
+            <li>Editor annotations</li>
+            <li>Tool window for results</li>
+        </ul>
+    ]]></change-notes>
+
+    <idea-version since-build="213"/>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="BlockSecOps"
+                    anchor="bottom"
+                    factoryClass="com.blocksecops.intellij.BlockSecOpsToolWindowFactory"
+                    icon="/icons/blocksecops.svg"/>
+
+        <externalAnnotator language=""
+                           implementationClass="com.blocksecops.intellij.BlockSecOpsExternalAnnotator"/>
+
+        <applicationConfigurable instance="com.blocksecops.intellij.BlockSecOpsSettingsConfigurable"
+                                 id="blocksecops.settings"
+                                 displayName="BlockSecOps"/>
+
+        <applicationService serviceImplementation="com.blocksecops.intellij.BlockSecOpsSettings"/>
+
+        <notificationGroup id="BlockSecOps Notifications"
+                           displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <group id="BlockSecOps.Menu" text="BlockSecOps" description="BlockSecOps security scanner">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <action id="BlockSecOps.ScanFile"
+                    class="com.blocksecops.intellij.BlockSecOpsScanFileAction"
+                    text="Scan Current File"
+                    description="Scan the current file for security issues"
+                    icon="/icons/scan.svg"/>
+
+            <action id="BlockSecOps.ScanProject"
+                    class="com.blocksecops.intellij.BlockSecOpsScanProjectAction"
+                    text="Scan Project"
+                    description="Scan the entire project for security issues"
+                    icon="/icons/scan-all.svg"/>
+
+            <separator/>
+
+            <action id="BlockSecOps.ShowResults"
+                    class="com.blocksecops.intellij.BlockSecOpsShowResultsAction"
+                    text="Show Results"
+                    description="Show scan results in the tool window"/>
+        </group>
+
+        <action id="BlockSecOps.ScanFileEditor"
+                class="com.blocksecops.intellij.BlockSecOpsScanFileAction"
+                text="BlockSecOps: Scan File"
+                description="Scan this file for security issues">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
