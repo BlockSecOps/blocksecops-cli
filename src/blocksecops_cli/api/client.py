@@ -176,6 +176,7 @@ class BlockSecOpsClient:
         self,
         contract_id: UUID,
         scanners: Optional[List[str]] = None,
+        scan_source: str = "cli",
     ) -> Scan:
         """
         Create a new scan for a contract.
@@ -183,13 +184,17 @@ class BlockSecOpsClient:
         Args:
             contract_id: Contract ID to scan
             scanners: Optional list of specific scanners to use
+            scan_source: Source identifier (cli, vscode, jetbrains, neovim, github_actions, etc.)
 
         Returns:
             Scan object with scan details
         """
-        payload: Dict[str, Any] = {"contract_id": str(contract_id)}
+        payload: Dict[str, Any] = {
+            "contract_id": str(contract_id),
+            "scan_source": scan_source,
+        }
         if scanners:
-            payload["scanners"] = scanners
+            payload["scanner_ids"] = scanners
 
         result = await self._request("POST", "/api/v1/scans", json=payload)
         return Scan(**result)
@@ -288,6 +293,7 @@ class BlockSecOpsClient:
         file_path: Path,
         wait: bool = True,
         scanners: Optional[List[str]] = None,
+        scan_source: str = "cli",
         progress_callback: Optional[callable] = None,
     ) -> tuple[Scan, Optional[ScanResult]]:
         """
@@ -297,6 +303,7 @@ class BlockSecOpsClient:
             file_path: Path to the contract file
             wait: Whether to wait for scan completion
             scanners: Optional list of specific scanners
+            scan_source: Source identifier (cli, vscode, jetbrains, neovim, github_actions, etc.)
             progress_callback: Optional callback for progress updates
 
         Returns:
@@ -306,7 +313,11 @@ class BlockSecOpsClient:
         upload = await self.upload_file(file_path)
 
         # Create scan
-        scan = await self.create_scan(upload.contract_id, scanners=scanners)
+        scan = await self.create_scan(
+            upload.contract_id,
+            scanners=scanners,
+            scan_source=scan_source,
+        )
 
         if not wait:
             return scan, None
@@ -323,3 +334,45 @@ class BlockSecOpsClient:
             result = await self.get_scan_results(scan.id)
 
         return scan, result
+
+    async def submit_local_results(
+        self,
+        scan_id: UUID,
+        vulnerabilities: List[Dict[str, Any]],
+    ) -> ScanResult:
+        """
+        Submit locally-generated scan results to the API.
+
+        Args:
+            scan_id: ID of the scan to submit results for
+            vulnerabilities: List of vulnerability dicts from local scanner
+
+        Returns:
+            ScanResult with processed vulnerabilities
+        """
+        payload = {
+            "scanner_id": "soliditydefend",
+            "vulnerabilities": vulnerabilities,
+            "status": "completed",
+        }
+
+        result = await self._request(
+            "POST",
+            f"/api/v1/scans/{scan_id}/results",
+            json=payload,
+        )
+
+        # Parse response as ScanResult
+        vulns = [Vulnerability(**v) for v in result.get("vulnerabilities", [])]
+
+        return ScanResult(
+            total_vulnerabilities=result.get("total_vulnerabilities", len(vulns)),
+            critical_count=result.get("critical_count", 0),
+            high_count=result.get("high_count", 0),
+            medium_count=result.get("medium_count", 0),
+            low_count=result.get("low_count", 0),
+            info_count=result.get("info_count", 0),
+            vulnerabilities=vulns,
+            scanners_used=result.get("scanners_used", ["soliditydefend"]),
+            duration_seconds=result.get("duration_seconds"),
+        )
