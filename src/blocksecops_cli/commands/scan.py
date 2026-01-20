@@ -13,9 +13,14 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from ..api.client import APIError, AuthenticationError, BlockSecOpsClient
 from ..config import get_api_key
 from ..formatters import OutputFormat, get_formatter
+from ..scanner import SolidityDefendScanner
+from ..scanner.downloader import DownloadError
 
 app = typer.Typer(help="Scan commands")
 console = Console()
+
+# Valid scan sources
+VALID_SCAN_SOURCES = {"cli", "vscode", "jetbrains", "neovim", "vim", "github_actions", "web"}
 
 
 def require_auth():
@@ -31,6 +36,17 @@ def scan_run(
         ...,
         help="Path to contract file or directory",
         exists=True,
+    ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        "-l",
+        help="Run SolidityDefend locally (downloads latest from GitHub if needed)",
+    ),
+    scan_source: str = typer.Option(
+        "cli",
+        "--scan-source",
+        help="Source identifier for tracking (cli, vscode, jetbrains, neovim, github_actions)",
     ),
     wait: bool = typer.Option(
         True,
@@ -48,7 +64,7 @@ def scan_run(
         None,
         "--scanner",
         "-s",
-        help="Specific scanners to use (can be repeated)",
+        help="Specific scanners to use (can be repeated, ignored with --local)",
     ),
     fail_on: Optional[str] = typer.Option(
         None,
@@ -69,42 +85,135 @@ def scan_run(
         console.print(f"[red]Error: Path not found: {path}[/red]")
         raise typer.Exit(1)
 
-    async def run_scan():
-        client = BlockSecOpsClient()
+    # Validate scan source
+    if scan_source not in VALID_SCAN_SOURCES:
+        console.print(
+            f"[yellow]Warning: Unknown scan source '{scan_source}'. "
+            f"Valid sources: {', '.join(sorted(VALID_SCAN_SOURCES))}[/yellow]"
+        )
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            # Upload
-            task = progress.add_task("Uploading contract...", total=None)
+    if local:
+        # Local scan workflow
+        asyncio.run(_run_local_scan(path, scan_source, output, output_file, fail_on))
+    else:
+        # Remote scan workflow (existing behavior)
+        asyncio.run(_run_remote_scan(path, scan_source, wait, output, scanners, output_file, fail_on))
 
-            scan, result = await client.scan_file(
-                path,
-                wait=wait,
-                scanners=scanners,
-                progress_callback=lambda s: progress.update(
-                    task, description=f"Scan status: {s.status}"
-                ),
+
+async def _run_local_scan(
+    path: Path,
+    scan_source: str,
+    output: OutputFormat,
+    output_file: Optional[Path],
+    fail_on: Optional[str],
+):
+    """Run SolidityDefend locally and submit results to API."""
+    client = BlockSecOpsClient()
+    scanner = SolidityDefendScanner()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        try:
+            # Step 1: Check/download SolidityDefend
+            task = progress.add_task("Checking SolidityDefend installation...", total=None)
+            await scanner.downloader.ensure_latest()
+            version = scanner.get_version()
+            progress.update(task, description=f"SolidityDefend {version} ready")
+
+            # Step 2: Upload contract to create contract record
+            progress.update(task, description="Uploading contract...")
+            upload = await client.upload_file(path)
+
+            # Step 3: Create scan record with source
+            progress.update(task, description="Creating scan record...")
+            scan = await client.create_scan(
+                upload.contract_id,
+                scanners=["soliditydefend"],
+                scan_source=scan_source,
             )
+
+            # Step 4: Run local scan
+            progress.update(task, description="Running SolidityDefend locally...")
+            raw_results = await scanner.scan(path)
+
+            # Step 5: Transform results
+            progress.update(task, description="Processing results...")
+            vulnerabilities = scanner.transform_results(raw_results)
+
+            # Step 6: Submit results to API
+            progress.update(task, description="Submitting results to API...")
+            result = await client.submit_local_results(scan.id, vulnerabilities)
+
+            # Step 7: Get final scan state
+            progress.update(task, description="Finalizing...")
+            scan = await client.get_scan(scan.id)
 
             progress.update(task, description="Scan complete!")
 
-        return scan, result
+        except DownloadError as e:
+            console.print(f"[red]Download error: {e}[/red]")
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
 
-    try:
-        scan, result = asyncio.run(run_scan())
-    except AuthenticationError as e:
-        console.print(f"[red]Authentication error: {e}[/red]")
+    if scan.status == "failed":
+        console.print(f"[red]Scan failed: {scan.error_message or 'Unknown error'}[/red]")
         raise typer.Exit(1)
-    except APIError as e:
-        console.print(f"[red]API error: {e}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+
+    # Format output
+    formatter = get_formatter(output)
+    formatted = formatter.format_scan(scan, result)
+
+    if output_file:
+        output_file.write_text(formatted)
+        console.print(f"[green]Results written to: {output_file}[/green]")
+    else:
+        console.print(formatted)
+
+    # Check fail-on threshold
+    if fail_on:
+        exit_code = _check_fail_threshold(result, fail_on)
+        if exit_code:
+            raise typer.Exit(exit_code)
+
+
+async def _run_remote_scan(
+    path: Path,
+    scan_source: str,
+    wait: bool,
+    output: OutputFormat,
+    scanners: Optional[List[str]],
+    output_file: Optional[Path],
+    fail_on: Optional[str],
+):
+    """Run scan remotely via API (existing behavior with scan_source support)."""
+    client = BlockSecOpsClient()
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        # Upload
+        task = progress.add_task("Uploading contract...", total=None)
+
+        scan, result = await client.scan_file(
+            path,
+            wait=wait,
+            scanners=scanners,
+            scan_source=scan_source,
+            progress_callback=lambda s: progress.update(
+                task, description=f"Scan status: {s.status}"
+            ),
+        )
+
+        progress.update(task, description="Scan complete!")
 
     if not wait:
         console.print(f"[green]Scan started: {scan.id}[/green]")
